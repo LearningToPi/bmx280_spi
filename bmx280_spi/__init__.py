@@ -155,7 +155,10 @@ class Bmx280Readings:
 
 class Bmx280Spi:
     ''' Class to represent a BME280 or BMP280 sensor connected via an SPI bus '''
-    def __init__(self, spiBus:int, cs_pin:int, cs_chip=None, set_spi_hz=True, logger=None):
+    def __init__(self, spiBus:int, cs_pin:int, cs_chip=None, set_spi_hz=True, logger=None,
+                temp_enable=True, pressure_enable=True, humidity_enable=True, filter=0,
+                temp_oversample=1, pressure_oversample=1, humidity_oversample=1,
+                mode=MODE_FORCED, sleep_duration=0):
         self._lock = Lock()
         self._log_extra = f"SPI{spiBus}.{cs_pin}"
         self._logger = logger if logger is not None else logging_handler.create_logger('DEBUG' if DEBUG else 'INFO')
@@ -224,6 +227,57 @@ class Bmx280Spi:
             ]
             self._logger.debug(f"{self.info_str}: Humidity Trim: {self._trim_humid}")
 
+        # init the sensor
+        self.init(temp_enable=temp_enable, pressure_enable=pressure_enable, humidity_enable=humidity_enable,
+                  temp_oversample=temp_oversample, pressure_oversample=pressure_oversample, 
+                  humidity_oversample=humidity_oversample, mode=mode, sleep_duration=sleep_duration, filter=filter)
+
+    def init(self, temp_enable=True, pressure_enable=True, humidity_enable=True, filter=0,
+                temp_oversample=1, pressure_oversample=1, humidity_oversample=1,
+                mode=MODE_FORCED, sleep_duration=0) -> bool:
+        ''' Initialize the sensor with the bulk settings 
+        Parameters:
+            temp_enable (bool:True) - Enables the temperature sensor
+            humidity_enable (bool:True) - Enables the humidity sensor (if available)
+            pressure_enable (bool:True) - Enables the pressure sensor
+            filter (int:0) - Enables the filter (averages readings to reduce fluctuations)
+                Supports 0, 2, 4, 8 and 16.  Formula is data_filtered = (previous_data * (filter - 1) + new_data) / filter
+            temp_oversample (int:1) - Sets the oversampling rate for temp sensor (0,1,2,4,8) (0 disables the sensor)
+            humidity_oversample (int:1) - Sets the oversampling rate for humidity sensor (0,1,2,4,8) (0 disables the sensor)
+            pressure_oversample (int:1) - Sets the oversampling rate for pressure sensor (0,1,2,4,8) (0 disables the sensor)
+            mode (int:1) - MODE_STANDBY = 0, MODE_FORCED = 1, MODE_NORMAL = 3
+
+        Returns:
+            True - Settings were successful
+            False - An error occured
+        '''
+        if not self.set_filter(filter):
+            return False
+        if not self.set_sleep_duration_value(sleep_duration):
+            return False
+        if not self.set_power_mode(mode):
+            return False
+        if temp_enable:
+            if not self.set_temp_oversample(temp_oversample if temp_oversample >= 1 else 1):
+                return False
+        else:
+            if not self.set_temp_oversample(0):
+                return False
+        if pressure_enable:
+            if not self.set_pressure_oversample(pressure_oversample if pressure_oversample >= 1 else 1):
+                return False
+        else:
+            if not self.set_pressure_oversample(0):
+                return False
+        if self.model == 'BME280':
+            if humidity_enable:
+                if not self.set_humidity_oversample(humidity_oversample if humidity_oversample >= 1 else 1):
+                    return False
+            else:
+                if not self.set_humidity_oversample(0):
+                    return False
+        return True
+
     def _read_reg(self, reg:int, count=1) -> int:
         ''' Read a register and return the value '''
         with self._lock:
@@ -234,7 +288,7 @@ class Bmx280Spi:
             self._logger.debug(f"{self.info_str}: Read Register: {reg}, value: {value}")
             return value[0] if isinstance(value, list) and len(value) == 1 else value
 
-    def _write_single_reg(self, reg:int, value:int, retries=WRITE_RETRY, retry_delay=WRITE_RETRY_DELAY) -> bool:
+    def _write_single_reg(self, reg:int, value:int, retries=WRITE_RETRY, retry_delay=WRITE_RETRY_DELAY, check_reply=True) -> bool:
         '''Write a single register.  Returns True/False if successful (tested by reading back from the sensor) '''
         for x in range(retries):
             with self._lock:
@@ -242,11 +296,12 @@ class Bmx280Spi:
                 self._cs.low()
                 self._spi.xfer([reg & ~WRITE_MASK, value])
                 self._cs.high()
-            updated_value = self._read_reg(reg)
-            if value == updated_value:
-                return True
-            self._logger.warning(f"{self.info_str}: Write error to reg {reg}. Sending {value}, device returned {updated_value}. Retry {x+1}/{retries} after {retry_delay} sec")
-            sleep(retry_delay)
+            if check_reply:
+                updated_value = self._read_reg(reg)
+                if value == updated_value:
+                    return True
+                self._logger.warning(f"{self.info_str}: Write error to reg {reg}. Sending {value}, device returned {updated_value}. Retry {x+1}/{retries} after {retry_delay} sec")
+                sleep(retry_delay)
 
     def get_filter(self) -> int:
         ''' Read the filter coefficient from the sensor '''
@@ -318,7 +373,7 @@ class Bmx280Spi:
             press_ovsmpl = ctrl_meas & REG_CTRL_MEAS_PRESS_OVERSMPL
             temp_ovsmpl = ctrl_meas & REG_CTRL_MEAS_TEMP_OVERSMPL
             self._logger.debug(f"{self.info_str}: Setting Power Mode to: {value}.  Existing: {(ctrl_meas & REG_CTRL_MEAS_POWER) >> get_trailing_bits(REG_CTRL_MEAS_POWER)}")
-            return self._write_single_reg(REG_CTRL_MEAS, temp_ovsmpl + press_ovsmpl + set_bits(MODE_VALUES.index(value), REG_CTRL_MEAS_POWER))
+            return self._write_single_reg(REG_CTRL_MEAS, temp_ovsmpl + press_ovsmpl + (value if value in MODE_VALUES else 1), check_reply=False if value == MODE_FORCED else True)
 
     def set_temp_oversample(self, value) -> bool:
         ''' Write the oversample rate for the temp sensor.  Values 0,1,2,4,8,16 supported.  Returns True/False if successful '''
@@ -375,7 +430,7 @@ class Bmx280Spi:
             If in standby - set to force and get reading
             If in normal - collect the last readings from the register
             Returns an instance of Bmx280Readings containing the readings '''
-        if self.get_power_mode() == MODE_FORCED:
+        if self.get_power_mode() == MODE_STANDBY:
             # set to forced and wait for the sensor to complete
             cancel_time = time() + timeout
             self.set_power_mode(MODE_FORCED)

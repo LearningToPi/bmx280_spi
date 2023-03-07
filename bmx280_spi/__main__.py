@@ -77,12 +77,6 @@ def run_test(**kwargs):
             cs_chip=kwargs.get('gpio_chip', DEF_GPIO_CHIP),
             logger=logger
         )
-    sensor.set_power_mode(MODE_NORMAL)
-    sensor.set_sleep_duration_value(3)
-    sensor.set_temp_oversample(1)
-    sensor.set_pressure_oversample(1)
-    sensor.set_humidity_oversample(1)
-    sensor.set_filter(0)
 
     # Run the test!
     data = []

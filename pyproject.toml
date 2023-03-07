@@ -1,6 +1,6 @@
 [project]
 name = "bmx280_spi"
-version = "1.0.0"
+version = "1.0.1"
 description = "Python module to use the SPI bus to read bmp280/bme280 sensors"
 authors = [{name = "Thomas Dunteman", email= "git@learningtopi.com"}]
 keywords = ["bmp280", "bme280", "spi"]
