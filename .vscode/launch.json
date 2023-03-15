@@ -11,7 +11,7 @@
             "module": "bmx280_spi",
             "justMyCode": true,
             "args": [
-                "--spi", "1",
+                "--spi", "0",
                 "--time", "120",
                 "--pressure", "psi",
                 "--temp-f",

@@ -10,6 +10,16 @@ BMP280 datasheet: https://www.bosch-sensortec.com/media/boschsensortec/downloads
 
 BME280 datasheet: https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf
 
+BMP280/BME280 Pinout:
+    SCL = SCK (SPI Clock)
+    SDO = MISO (sensor out to board in)
+    SDA = MOSI (sensir in to board out)
+    CSB = CS (select)
+
+### Parts:
+- BMP280 (Temp and pressure) - https://amzn.to/3YVwblE
+- BME280 (Temp, pressure and humidity) - https://amzn.to/3JIxtMr
+
 ## Usage:
 
 
