@@ -311,8 +311,6 @@ class Bmx280Spi:
             return False
         if not self.set_sleep_duration_value(sleep_duration):
             return False
-        if not self.set_power_mode(mode):
-            return False
         if temp_enable:
             if not self.set_temp_oversample(temp_oversample if temp_oversample >= 1 else 1):
                 return False
@@ -332,6 +330,8 @@ class Bmx280Spi:
             else:
                 if not self.set_humidity_oversample(0):
                     return False
+        if not self.set_power_mode(mode):
+            return False
         return True
 
     def _read_reg(self, reg:int, count=1) -> int:
@@ -429,6 +429,9 @@ class Bmx280Spi:
             press_ovsmpl = ctrl_meas & REG_CTRL_MEAS_PRESS_OVERSMPL
             temp_ovsmpl = ctrl_meas & REG_CTRL_MEAS_TEMP_OVERSMPL
             self._logger.debug(f"{self.info_str}: Setting Power Mode to: {value}.  Existing: {(ctrl_meas & REG_CTRL_MEAS_POWER) >> get_trailing_bits(REG_CTRL_MEAS_POWER)}")
+            if value == MODE_FORCED:
+                self._write_single_reg(REG_CTRL_MEAS, temp_ovsmpl + press_ovsmpl + (value if value in MODE_VALUES else 1), check_reply=False if value == MODE_FORCED else True)
+                return True
             return self._write_single_reg(REG_CTRL_MEAS, temp_ovsmpl + press_ovsmpl + (value if value in MODE_VALUES else 1), check_reply=False if value == MODE_FORCED else True)
 
     def set_temp_oversample(self, value) -> bool:
@@ -479,7 +482,7 @@ class Bmx280Spi:
 
     def reset_device(self):
         ''' Send a reset command to the device '''
-        self._write_single_reg(REG_RESET, REG_RESET_VALUE)
+        self._write_single_reg(REG_RESET, REG_RESET_VALUE, check_reply=False)
 
     def update_readings(self, timeout=2):
         ''' Update the temp/pressure/humidity readings (depending on platform)
