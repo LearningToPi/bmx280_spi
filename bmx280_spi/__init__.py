@@ -214,13 +214,13 @@ class Bmx280Spi:
     def __init__(self, spiBus:int, cs_pin:int, cs_chip=None, set_spi_hz=True, logger=None,
                 temp_enable=True, pressure_enable=True, humidity_enable=True, filter=0,
                 temp_oversample=1, pressure_oversample=1, humidity_oversample=1,
-                mode=MODE_FORCED, sleep_duration=0):
+                mode=MODE_FORCED, sleep_duration=0, cs=0):
         self._lock = Lock()
         self._log_extra = f"SPI{spiBus}.{cs_pin}"
         self._logger = logger if logger is not None else logging_handler.create_logger('DEBUG' if DEBUG else 'INFO')
         self._logger.info(f"{self.info_str}: Opening")
         self._spi = spidev.SpiDev()
-        self._spi.open(spiBus, 0)
+        self._spi.open(spiBus, cs)
         
         # check and lower or raise the speed if needed
         if self._spi.max_speed_hz > SPI_MAX_HZ and set_spi_hz:
@@ -401,7 +401,7 @@ class Bmx280Spi:
         for x in range(len(STANDBY_VALUES)):
             sleep_ms = STANDBY_VALUES[x] if STANDBY_VALUES[x] < value else sleep_ms
         self._logger.debug(f"{self.info_str}: Received sleep duration of {value}, setting to {sleep_ms}")
-        self.get_sleep_duration_ms(STANDBY_VALUES.index(sleep_ms))
+        return self.get_sleep_duration_ms()
 
     def get_temp_oversample(self) -> int:
         ''' Return the oversampling rate for temperature sensor '''
